@@ -33,9 +33,11 @@ logging.basicConfig(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Create/update tables on startup (safe: create_all is idempotent)
+    # Create/update tables on startup (safe: create_all is idempotent for new tables)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    # Add missing columns to existing tables (create_all doesn't ALTER existing tables)
+    await _apply_schema_updates()
     # Seed default plans
     await _seed_plans()
     # Start background scheduler
@@ -47,6 +49,32 @@ async def lifespan(app: FastAPI):
         logger.error(f"Scheduler failed to start: {e}")
     yield
     await engine.dispose()
+
+
+async def _apply_schema_updates():
+    """Add columns that create_all can't add to existing tables."""
+    from sqlalchemy import text
+    from app.database import async_session
+
+    migrations = [
+        ("users", "is_admin", "ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT FALSE"),
+        ("users", "is_email_verified", "ALTER TABLE users ADD COLUMN is_email_verified BOOLEAN DEFAULT FALSE"),
+    ]
+    async with async_session() as session:
+        for table, column, sql in migrations:
+            try:
+                await session.execute(text(
+                    f"SELECT {column} FROM {table} LIMIT 0"
+                ))
+            except Exception:
+                await session.rollback()
+                try:
+                    await session.execute(text(sql))
+                    await session.commit()
+                    logger.info(f"Added column {table}.{column}")
+                except Exception as e:
+                    await session.rollback()
+                    logger.warning(f"Could not add {table}.{column}: {e}")
 
 
 async def _seed_plans():
