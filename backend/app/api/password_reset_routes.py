@@ -4,7 +4,7 @@ import hashlib
 import secrets
 from datetime import datetime, timezone, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, EmailStr, Field
@@ -15,6 +15,7 @@ from app.models.user import User
 from app.models.password_reset_token import PasswordResetToken
 from app.auth.passwords import hash_password
 from app.services.email_service import send_password_reset_email
+from app.middleware.rate_limit import limiter
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -33,7 +34,8 @@ class VerifyTokenRequest(BaseModel):
 
 
 @router.post("/forgot-password")
-async def forgot_password(body: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit("3/minute")
+async def forgot_password(request: Request, body: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
     """Send a password reset email if the user exists."""
     # Always return success to prevent email enumeration
     result = await db.execute(select(User).where(User.email == body.email))

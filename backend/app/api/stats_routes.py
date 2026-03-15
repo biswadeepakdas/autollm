@@ -18,6 +18,13 @@ from app.api.schemas import DailyStatsResponse
 router = APIRouter(prefix="/api/projects/{project_id}/stats", tags=["stats"])
 
 
+def _pct_change(current: float, previous: float) -> float | None:
+    """Return percentage change from previous to current, or None if no previous data."""
+    if not previous:
+        return None
+    return round(((current - previous) / previous) * 100, 1)
+
+
 @router.get("/overview")
 async def get_overview(
     project_id: uuid.UUID,
@@ -32,7 +39,7 @@ async def get_overview(
 
     since = date.today() - timedelta(days=days)
 
-    # Aggregate from daily stats
+    # --- Current period aggregates ---
     result = await db.execute(
         select(
             func.sum(FeatureStatsDaily.total_requests).label("total_requests"),
@@ -46,9 +53,41 @@ async def get_overview(
         .join(Feature, Feature.id == FeatureStatsDaily.feature_id)
         .where(Feature.project_id == project_id, FeatureStatsDaily.stat_date >= since)
     )
-    row = result.one()
+    row = result.mappings().first()
 
-    # Daily breakdown
+    total_requests = int(row["total_requests"] or 0) if row else 0
+    total_tokens = int(row["total_tokens"] or 0) if row else 0
+    total_cost = float(row["total_cost"] or 0) if row else 0.0
+    total_savings = float(row["total_savings"] or 0) if row else 0.0
+    avg_latency = round(float(row["avg_latency"] or 0), 1) if row else 0.0
+    total_errors = int(row["total_errors"] or 0) if row else 0
+    total_rerouted = int(row["total_rerouted"] or 0) if row else 0
+
+    # --- Previous period aggregates (for trend calculation) ---
+    prev_start = since - timedelta(days=days)
+    result = await db.execute(
+        select(
+            func.sum(FeatureStatsDaily.total_requests).label("total_requests"),
+            func.sum(FeatureStatsDaily.total_cost_cents).label("total_cost"),
+        )
+        .join(Feature, Feature.id == FeatureStatsDaily.feature_id)
+        .where(
+            Feature.project_id == project_id,
+            FeatureStatsDaily.stat_date >= prev_start,
+            FeatureStatsDaily.stat_date < since,
+        )
+    )
+    prev_row = result.mappings().first()
+    prev_requests = float(prev_row["total_requests"] or 0) if prev_row else 0.0
+    prev_cost = float(prev_row["total_cost"] or 0) if prev_row else 0.0
+
+    cost_trend = _pct_change(total_cost, prev_cost)
+    request_trend = _pct_change(total_requests, prev_requests)
+
+    # p95 latency: approximate as avg * 1.5 when we only have averaged daily data
+    p95_latency_ms = round(avg_latency * 1.5, 1) if avg_latency else None
+
+    # --- Daily breakdown ---
     result = await db.execute(
         select(
             FeatureStatsDaily.stat_date,
@@ -63,7 +102,7 @@ async def get_overview(
     )
     daily = [{"date": str(r.stat_date), "requests": r.requests or 0, "cost_cents": float(r.cost or 0), "savings_cents": float(r.savings or 0)} for r in result]
 
-    # Top models by cost
+    # --- Top models by cost ---
     result = await db.execute(
         select(
             LLMRequest.provider,
@@ -80,13 +119,16 @@ async def get_overview(
 
     return {
         "totals": {
-            "cost_cents": float(row.total_cost or 0),
-            "savings_cents": float(row.total_savings or 0),
-            "request_count": int(row.total_requests or 0),
-            "total_tokens": int(row.total_tokens or 0),
-            "avg_latency_ms": round(float(row.avg_latency or 0), 1),
-            "total_errors": int(row.total_errors or 0),
-            "total_rerouted": int(row.total_rerouted or 0),
+            "cost_cents": total_cost,
+            "cost_trend": cost_trend,
+            "savings_cents": total_savings,
+            "request_count": total_requests,
+            "request_trend": request_trend,
+            "total_tokens": total_tokens,
+            "avg_latency_ms": avg_latency,
+            "p95_latency_ms": p95_latency_ms,
+            "total_errors": total_errors,
+            "total_rerouted": total_rerouted,
         },
         "daily": daily,
         "top_models": top_models,

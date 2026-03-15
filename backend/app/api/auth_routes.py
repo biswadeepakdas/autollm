@@ -19,6 +19,7 @@ from app.models.plan import Plan, PlanCode, UserSubscription
 from app.api.schemas import (
     RegisterRequest, LoginRequest, AuthResponse, UserResponse,
 )
+from app.middleware.rate_limit import limiter
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -52,9 +53,12 @@ async def _assign_free_plan(db: AsyncSession, user: User) -> None:
         sub = UserSubscription(user_id=user.id, plan_id=free_plan.id, status="active")
         db.add(sub)
         await db.flush()
-        # Reload subscription
+        # Reload subscription and oauth_accounts
         result = await db.execute(
-            select(User).options(selectinload(User.subscription).selectinload(UserSubscription.plan)).where(User.id == user.id)
+            select(User).options(
+                selectinload(User.subscription).selectinload(UserSubscription.plan),
+                selectinload(User.oauth_accounts),
+            ).where(User.id == user.id)
         )
         return result.scalar_one()
     return user
@@ -81,7 +85,8 @@ def _set_auth_cookies(response: Response, access: str, refresh: str) -> None:
 # ── Register ─────────────────────────────────────────────────────────────────
 
 @router.post("/register", response_model=AuthResponse)
-async def register(body: RegisterRequest, response: Response, db: AsyncSession = Depends(get_db)):
+@limiter.limit("5/minute")
+async def register(request: Request, body: RegisterRequest, response: Response, db: AsyncSession = Depends(get_db)):
     # Check if email already exists
     existing = await db.execute(select(User).where(User.email == body.email))
     if existing.scalar_one_or_none():
@@ -114,7 +119,8 @@ async def register(body: RegisterRequest, response: Response, db: AsyncSession =
 # ── Login ────────────────────────────────────────────────────────────────────
 
 @router.post("/login", response_model=AuthResponse)
-async def login(body: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)):
+@limiter.limit("10/minute")
+async def login(request: Request, body: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(User).options(
             selectinload(User.subscription).selectinload(UserSubscription.plan),

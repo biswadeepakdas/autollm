@@ -13,6 +13,7 @@ const navItems = [
   { href: "/dashboard/suggestions", label: "Suggestions", icon: Lightbulb, badgeKey: "suggestions" },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
   { href: "/dashboard/pricing", label: "Pricing", icon: CreditCard },
+  { href: "/dashboard/admin", label: "Admin", icon: Shield },
 ];
 
 interface SidebarProps {

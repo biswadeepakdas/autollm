@@ -5,6 +5,13 @@ import { Users, Activity, DollarSign, PieChart, Shield, ShieldOff } from "lucide
 import { Card, Btn, Spinner } from "@/components/ui";
 import { admin } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
+import { ApiError } from "@/lib/api";
+
+const PLAN_LABELS: Record<string, string> = {
+  plan_free: "Free",
+  plan_pro: "Pro",
+  plan_max: "Max",
+};
 
 export default function AdminPage() {
   const { user } = useAuth();
@@ -29,7 +36,11 @@ export default function AdminPage() {
       setStats(s);
       setUsers(u);
     } catch (e: any) {
-      setError(e.message || "Failed to load admin data. You may not have admin access.");
+      if (e instanceof ApiError && e.status === 403) {
+        setError("Access denied. You do not have admin privileges.");
+      } else {
+        setError(e.message || "Failed to load admin data.");
+      }
     } finally {
       setLoading(false);
     }
@@ -132,7 +143,7 @@ export default function AdminPage() {
             {Object.entries(stats.plan_distribution).map(([plan, count]: any) => (
               <div key={plan} className="text-center">
                 <p className="text-2xl font-bold text-gray-900">{count}</p>
-                <p className="text-sm text-gray-500">{plan}</p>
+                <p className="text-sm text-gray-500">{PLAN_LABELS[plan] || plan}</p>
               </div>
             ))}
           </div>
@@ -162,7 +173,7 @@ export default function AdminPage() {
                     <td className="py-2 px-3 text-gray-600">{u.name || "—"}</td>
                     <td className="py-2 px-3">
                       <select
-                        value={u.plan === "Free" ? "plan_free" : u.plan === "Pro" ? "plan_pro" : "plan_max"}
+                        value={u.plan}
                         onChange={(e) => handleChangePlan(u.id, e.target.value)}
                         className="text-xs border border-gray-200 rounded px-2 py-1"
                       >

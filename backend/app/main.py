@@ -140,7 +140,29 @@ app.include_router(admin_router)
 # ── Health check ─────────────────────────────────────────────────────────────
 @app.get("/health")
 async def health():
-    return {"status": "ok", "version": settings.APP_VERSION, "environment": settings.ENVIRONMENT}
+    from sqlalchemy import text
+    from fastapi.responses import JSONResponse
+    from app.database import async_session
+
+    try:
+        async with async_session() as session:
+            await session.execute(text("SELECT 1"))
+        return {
+            "status": "ok",
+            "version": settings.APP_VERSION,
+            "environment": settings.ENVIRONMENT,
+            "database": "connected",
+        }
+    except Exception:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "degraded",
+                "version": settings.APP_VERSION,
+                "environment": settings.ENVIRONMENT,
+                "database": "disconnected",
+            },
+        )
 
 
 @app.get("/api/config")

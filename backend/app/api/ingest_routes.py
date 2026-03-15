@@ -3,7 +3,7 @@
 import re
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -16,6 +16,7 @@ from app.models.project_setting import ProjectSetting
 from app.services.plan_service import check_ingestion_limit, increment_usage, get_user_plan
 from app.services.cost_engine import estimate_cost_cents, estimate_savings_cents
 from app.api.schemas import IngestRequest, IngestResponse, SDKConfigResponse
+from app.middleware.rate_limit import limiter
 
 router = APIRouter(prefix="/api/sdk", tags=["sdk"])
 
@@ -23,7 +24,8 @@ router = APIRouter(prefix="/api/sdk", tags=["sdk"])
 # ── POST /ingest — log an LLM request ───────────────────────────────────────
 
 @router.post("/ingest", response_model=IngestResponse)
-async def ingest(body: IngestRequest, project: AuthedProject, db: AsyncSession = Depends(get_db)):
+@limiter.limit("200/minute")
+async def ingest(request: Request, body: IngestRequest, project: AuthedProject, db: AsyncSession = Depends(get_db)):
     # 1. Check ingestion limits
     within_limit = await check_ingestion_limit(db, project)
     if not within_limit:
@@ -97,7 +99,8 @@ async def ingest(body: IngestRequest, project: AuthedProject, db: AsyncSession =
 # ── GET /config — SDK fetches project config ─────────────────────────────────
 
 @router.get("/config", response_model=SDKConfigResponse)
-async def get_config(project: AuthedProject, db: AsyncSession = Depends(get_db)):
+@limiter.limit("60/minute")
+async def get_config(request: Request, project: AuthedProject, db: AsyncSession = Depends(get_db)):
     # Load project settings
     result = await db.execute(
         select(ProjectSetting).where(ProjectSetting.project_id == project.id)
