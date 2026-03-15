@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NVIDIA Data Flywheel Blueprints — Deep Analysis</title>
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --card: #141926;
+    --card2: #1a2035;
+    --nvidia: #76b900;
+    --wandb: #ffbe00;
+    --mlrun: #4e8cff;
+    --text: #e4e6eb;
+    --muted: #8b92a5;
+    --border: #252d44;
+    --accent: #76b900;
+    --code-bg: #0d1220;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: 'Inter', -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; }
+
+  .hero { background: linear-gradient(135deg, #0a1a0d 0%, #0a0e1a 40%, #0e1428 100%); padding: 56px 40px 48px; text-align: center; border-bottom: 1px solid var(--border); }
+  .hero h1 { font-size: 2.3rem; font-weight: 800; color: #fff; margin-bottom: 10px; }
+  .hero h1 span { color: var(--nvidia); }
+  .hero p { color: var(--muted); font-size: 1rem; max-width: 750px; margin: 0 auto 20px; }
+
+  .container { max-width: 1100px; margin: 0 auto; padding: 40px 24px; }
+
+  h2 { font-size: 1.6rem; font-weight: 800; color: #fff; margin: 48px 0 8px; }
+  h2 .sub { font-size: 0.95rem; font-weight: 400; color: var(--muted); display: block; margin-top: 4px; }
+  h3 { font-size: 1.15rem; font-weight: 700; color: #fff; margin: 24px 0 8px; }
+
+  .blueprint-tabs { display: flex; gap: 12px; margin: 32px 0 24px; flex-wrap: wrap; }
+  .tab { padding: 12px 24px; border-radius: 12px; cursor: pointer; font-weight: 600; font-size: 0.9rem; border: 1px solid var(--border); background: var(--card); color: var(--muted); transition: all 0.2s; flex: 1; min-width: 200px; text-align: center; }
+  .tab:hover { border-color: #555; }
+  .tab.active-nvidia { border-color: var(--nvidia); color: var(--nvidia); background: rgba(118,185,0,0.08); }
+  .tab.active-wandb { border-color: var(--wandb); color: var(--wandb); background: rgba(255,190,0,0.08); }
+  .tab.active-mlrun { border-color: var(--mlrun); color: var(--mlrun); background: rgba(78,140,255,0.08); }
+  .tab .label { font-size: 0.75rem; color: var(--muted); display: block; margin-top: 2px; font-weight: 400; }
+
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 26px 28px; margin-bottom: 20px; }
+  .card-green { border-left: 4px solid var(--nvidia); }
+  .card-yellow { border-left: 4px solid var(--wandb); }
+  .card-blue { border-left: 4px solid var(--mlrun); }
+  .card-idea { border-left: 4px solid #a855f7; background: linear-gradient(135deg, var(--card) 0%, #1a1530 100%); }
+
+  .code-block { background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px; padding: 18px 22px; margin: 12px 0; overflow-x: auto; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.85rem; color: #c5d0e6; line-height: 1.6; white-space: pre; }
+  .code-block .comment { color: #5a6a8a; }
+  .code-block .keyword { color: var(--nvidia); }
+  .code-block .string { color: #f0c674; }
+  .code-block .func { color: #81a1c1; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+
+  .stat { text-align: center; padding: 20px; }
+  .stat-value { font-size: 1.6rem; font-weight: 800; color: var(--nvidia); }
+  .stat-label { font-size: 0.82rem; color: var(--muted); margin-top: 2px; }
+
+  .file-tree { font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; color: #8fa4c8; line-height: 1.9; padding: 16px 20px; background: var(--code-bg); border-radius: 10px; border: 1px solid var(--border); }
+  .file-tree .dir { color: var(--nvidia); font-weight: 600; }
+  .file-tree .file { color: #c5d0e6; }
+  .file-tree .key-file { color: #f0c674; font-weight: 600; }
+
+  .tag { display: inline-block; padding: 3px 12px; border-radius: 20px; font-size: 0.78rem; font-weight: 600; margin: 2px 4px 2px 0; }
+  .tag-nvidia { background: rgba(118,185,0,0.15); color: var(--nvidia); }
+  .tag-wandb { background: rgba(255,190,0,0.15); color: var(--wandb); }
+  .tag-mlrun { background: rgba(78,140,255,0.15); color: var(--mlrun); }
+  .tag-tech { background: rgba(168,85,247,0.15); color: #a855f7; }
+  .tag-idea { background: rgba(236,72,153,0.15); color: #ec4899; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.9rem; }
+  th { background: var(--card2); color: var(--nvidia); text-align: left; padding: 12px 16px; font-weight: 700; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.5px; }
+  td { padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--muted); }
+  tr:hover td { background: rgba(118,185,0,0.03); }
+
+  .flow-steps { display: flex; gap: 0; flex-wrap: wrap; margin: 16px 0; align-items: stretch; }
+  .flow-step { flex: 1; min-width: 140px; padding: 16px; background: var(--card2); text-align: center; border: 1px solid var(--border); position: relative; }
+  .flow-step:first-child { border-radius: 10px 0 0 10px; }
+  .flow-step:last-child { border-radius: 0 10px 10px 0; }
+  .flow-step .num { font-size: 1.3rem; font-weight: 800; color: var(--nvidia); }
+  .flow-step .desc { font-size: 0.78rem; color: var(--muted); margin-top: 4px; }
+  .flow-step::after { content: '→'; position: absolute; right: -8px; top: 50%; transform: translateY(-50%); color: var(--nvidia); font-weight: 800; font-size: 1.1rem; z-index: 1; }
+  .flow-step:last-child::after { display: none; }
+
+  .section-divider { height: 1px; background: var(--border); margin: 48px 0; }
+
+  .idea-number { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; background: linear-gradient(135deg, #a855f7, #ec4899); color: #fff; font-weight: 700; font-size: 0.85rem; margin-right: 10px; flex-shrink: 0; }
+
+  @media (max-width: 768px) {
+    .hero h1 { font-size: 1.5rem; }
+    .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    .flow-steps { flex-direction: column; }
+    .flow-step { border-radius: 0 !important; }
+    .flow-step::after { content: '↓'; right: 50%; top: auto; bottom: -8px; transform: translateX(50%); }
+    .flow-step:last-child::after { display: none; }
+    .container { padding: 24px 16px; }
+    .blueprint-tabs { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1><span>NVIDIA</span> Data Flywheel Blueprints</h1>
+  <p>Complete technical analysis of all 3 blueprints — the code inside, what's reusable, and 8 concrete product ideas you can build on top of them.</p>
+  <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-top:16px;">
+    <span class="tag tag-nvidia">NVIDIA NeMo</span>
+    <span class="tag tag-wandb">Weights & Biases</span>
+    <span class="tag tag-mlrun">MLRun / Iguazio</span>
+    <span class="tag tag-tech">Apache 2.0 Licensed</span>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- ========================== OVERVIEW ========================== -->
+<h2>At a Glance <span class="sub">Three blueprints, one concept: continuously improve AI models using production data.</span></h2>
+
+<div class="grid-3">
+  <div class="card card-green">
+    <div class="stat">
+      <div class="stat-value">Core</div>
+      <div class="stat-label">Blueprint 1: Data Flywheel Engine</div>
+    </div>
+    <p style="color:var(--muted);font-size:0.88rem;text-align:center;">The foundation. FastAPI + Celery service that orchestrates data collection → evaluation → fine-tuning → redeployment. Claimed 98.6% inference cost reduction.</p>
+    <div style="text-align:center;margin-top:12px;">
+      <span class="tag tag-nvidia">NVIDIA</span>
+      <span class="tag tag-tech">25+ Python files</span>
+    </div>
+  </div>
+  <div class="card card-yellow">
+    <div class="stat">
+      <div class="stat-value">Observe</div>
+      <div class="stat-label">Blueprint 2: AI Observability Layer</div>
+    </div>
+    <p style="color:var(--muted);font-size:0.88rem;text-align:center;">Adds W&B Weave tracing + W&B Models experiment tracking on top of the core flywheel. Production monitoring, version governance, and reproducibility.</p>
+    <div style="text-align:center;margin-top:12px;">
+      <span class="tag tag-wandb">Weights & Biases</span>
+      <span class="tag tag-tech">Fork of Core</span>
+    </div>
+  </div>
+  <div class="card card-blue">
+    <div class="stat">
+      <div class="stat-value">Orchestrate</div>
+      <div class="stat-label">Blueprint 3: AI Orchestration Layer</div>
+    </div>
+    <p style="color:var(--muted);font-size:0.88rem;text-align:center;">Replaces manual task management with MLRun orchestration. Reduces boilerplate 90%, adds serverless functions, auto-logging, and pipeline visualization.</p>
+    <div style="text-align:center;margin-top:12px;">
+      <span class="tag tag-mlrun">MLRun / Iguazio</span>
+      <span class="tag tag-tech">Fork of Core</span>
+    </div>
+  </div>
+</div>
+
+<!-- ========================== CORE ENGINE DEEP DIVE ========================== -->
+<div class="section-divider"></div>
+<h2>Blueprint 1: The Core Engine <span class="sub">github.com/NVIDIA-AI-Blueprints/data-flywheel — the actual code</span></h2>
+
+<h3>Complete Source Tree</h3>
+<div class="file-tree">
+<span class="dir">src/</span>
+├── <span class="key-file">app.py</span>                          <span class="comment"># FastAPI application entry point</span>
+├── <span class="key-file">config.py</span>                       <span class="comment"># All configuration & env vars</span>
+├── <span class="file">log_utils.py</span>                     <span class="comment"># Structured logging</span>
+├── <span class="dir">api/</span>
+│   ├── <span class="key-file">endpoints.py</span>                <span class="comment"># REST routes: /api/jobs CRUD</span>
+│   ├── <span class="key-file">schemas.py</span>                  <span class="comment"># Pydantic request/response models</span>
+│   ├── <span class="key-file">models.py</span>                   <span class="comment"># Data structures</span>
+│   ├── <span class="file">db.py</span>                       <span class="comment"># MongoDB connection layer</span>
+│   ├── <span class="file">db_manager.py</span>               <span class="comment"># Database operations manager</span>
+│   └── <span class="key-file">job_service.py</span>              <span class="comment"># Job lifecycle management</span>
+├── <span class="dir">lib/</span>
+│   ├── <span class="dir">flywheel/</span>
+│   │   ├── <span class="key-file">job_manager.py</span>          <span class="comment"># Core flywheel orchestration logic</span>
+│   │   ├── <span class="key-file">icl_selection.py</span>        <span class="comment"># In-context learning example selection</span>
+│   │   ├── <span class="file">cancellation.py</span>         <span class="comment"># Job cancellation handling</span>
+│   │   ├── <span class="file">cleanup_manager.py</span>      <span class="comment"># Resource cleanup</span>
+│   │   ├── <span class="file">helpers.py</span>              <span class="comment"># Utility functions</span>
+│   │   └── <span class="file">util.py</span>                 <span class="comment"># General utilities</span>
+│   ├── <span class="dir">nemo/</span>
+│   │   ├── <span class="key-file">customizer.py</span>           <span class="comment"># LoRA fine-tuning via NeMo Customizer</span>
+│   │   ├── <span class="key-file">evaluator.py</span>            <span class="comment"># Model evaluation via NeMo Evaluator</span>
+│   │   ├── <span class="key-file">llm_as_judge.py</span>         <span class="comment"># LLM-as-judge evaluation framework</span>
+│   │   ├── <span class="file">data_uploader.py</span>        <span class="comment"># Dataset upload to NeMo Datastore</span>
+│   │   ├── <span class="file">dms_client.py</span>           <span class="comment"># Deployment Manager Service client</span>
+│   │   └── <span class="file">embedding.py</span>            <span class="comment"># Embedding model operations</span>
+│   └── <span class="dir">integration/</span>
+│       ├── <span class="key-file">dataset_creator.py</span>      <span class="comment"># Creates train/eval splits from logs</span>
+│       ├── <span class="key-file">es_client.py</span>            <span class="comment"># Elasticsearch log retrieval</span>
+│       ├── <span class="file">data_validator.py</span>       <span class="comment"># Validates data quality</span>
+│       ├── <span class="file">openai_format_validator.py</span> <span class="comment"># Ensures OpenAI format compliance</span>
+│       ├── <span class="file">record_exporter.py</span>      <span class="comment"># Exports records for processing</span>
+│       └── <span class="file">mlflow_client.py</span>        <span class="comment"># MLflow experiment tracking</span>
+└── <span class="dir">tasks/</span>
+    ├── <span class="key-file">tasks.py</span>                    <span class="comment"># Celery task definitions (main workflow)</span>
+    └── <span class="file">cli.py</span>                      <span class="comment"># Command-line interface</span>
+</div>
+
+<h3>API Endpoints (from openapi.json)</h3>
+<table>
+  <tr><th>Method</th><th>Endpoint</th><th>Purpose</th></tr>
+  <tr><td style="color:var(--nvidia);font-weight:700;">GET</td><td><code>/api/jobs</code></td><td>List all active/recent flywheel jobs</td></tr>
+  <tr><td style="color:#f0c674;font-weight:700;">POST</td><td><code>/api/jobs</code></td><td>Create new flywheel job (workload_id, client_id, data_split_config)</td></tr>
+  <tr><td style="color:var(--nvidia);font-weight:700;">GET</td><td><code>/api/jobs/{job_id}</code></td><td>Get detailed job status, NIMs array, datasets, evaluation results</td></tr>
+  <tr><td style="color:#ef4444;font-weight:700;">DELETE</td><td><code>/api/jobs/{job_id}</code></td><td>Remove job and associated resources</td></tr>
+  <tr><td style="color:#f0c674;font-weight:700;">POST</td><td><code>/api/jobs/{job_id}/cancel</code></td><td>Cancel a running job</td></tr>
+</table>
+
+<h3>Core Data Flow</h3>
+<div class="flow-steps">
+  <div class="flow-step"><div class="num">1</div><div class="desc">Production logs collected in Elasticsearch</div></div>
+  <div class="flow-step"><div class="num">2</div><div class="desc">Dataset created (train/eval split)</div></div>
+  <div class="flow-step"><div class="num">3</div><div class="desc">Candidate NIMs deployed</div></div>
+  <div class="flow-step"><div class="num">4</div><div class="desc">LLM Judge evaluates performance</div></div>
+  <div class="flow-step"><div class="num">5</div><div class="desc">LoRA fine-tuning applied</div></div>
+  <div class="flow-step"><div class="num">6</div><div class="desc">Re-evaluate & promote best model</div></div>
+</div>
+
+<h3>Required Log Schema (Elasticsearch Documents)</h3>
+<div class="code-block"><span class="comment">// Every production log entry must have this shape:</span>
+{
+  <span class="string">"timestamp"</span>: 1710432000,           <span class="comment">// epoch seconds</span>
+  <span class="string">"workload_id"</span>: <span class="string">"customer-support"</span>,  <span class="comment">// stable task identifier</span>
+  <span class="string">"client_id"</span>: <span class="string">"webapp-v2"</span>,          <span class="comment">// traffic source identifier</span>
+  <span class="string">"request"</span>: {                         <span class="comment">// full OpenAI ChatCompletion.create payload</span>
+    <span class="string">"model"</span>: <span class="string">"llama-3.1-70b-instruct"</span>,
+    <span class="string">"messages"</span>: [
+      { <span class="string">"role"</span>: <span class="string">"user"</span>, <span class="string">"content"</span>: <span class="string">"..."</span> }
+    ]
+  },
+  <span class="string">"response"</span>: { ... }                 <span class="comment">// complete ChatCompletion response</span>
+}</div>
+
+<h3>Infrastructure Requirements</h3>
+<div class="grid-2">
+  <div class="card">
+    <h3 style="margin-top:0;">Minimum (Remote Judge)</h3>
+    <table>
+      <tr><td>GPUs</td><td style="color:#fff;font-weight:600;">2× H100 / A100</td></tr>
+      <tr><td>Storage</td><td style="color:#fff;">200 GB free</td></tr>
+      <tr><td>OS</td><td>Ubuntu 22.04</td></tr>
+      <tr><td>Orchestration</td><td>Docker Compose</td></tr>
+    </table>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0;">Full (Self-Hosted Judge)</h3>
+    <table>
+      <tr><td>GPUs</td><td style="color:#fff;font-weight:600;">6× H100 / A100 / B200</td></tr>
+      <tr><td>Storage</td><td style="color:#fff;">500 GB+ recommended</td></tr>
+      <tr><td>OS</td><td>Ubuntu 22.04</td></tr>
+      <tr><td>Orchestration</td><td>Kubernetes ≥1.25 + Helm ≥3.8</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ========================== BLUEPRINT 2: OBSERVABILITY ========================== -->
+<div class="section-divider"></div>
+<h2>Blueprint 2: Observability Layer (W&B) <span class="sub">github.com/wandb/data-flywheel-nvidia — what it adds on top</span></h2>
+
+<div class="card card-yellow">
+  <p style="color:var(--text);font-size:0.95rem;margin-bottom:16px;">This is a <strong>fork of Blueprint 1</strong> that integrates Weights & Biases for production-grade observability. Same codebase, same API, but with two critical additions:</p>
+
+  <div class="grid-2">
+    <div class="card" style="background:var(--code-bg);">
+      <h3 style="margin-top:0;color:var(--wandb);">W&B Weave</h3>
+      <p style="color:var(--muted);font-size:0.88rem;">Traces every inference call in production. Captures prompt → response → latency → token usage. Creates an automatic feedback loop for the flywheel — you see exactly which prompts fail and why.</p>
+    </div>
+    <div class="card" style="background:var(--code-bg);">
+      <h3 style="margin-top:0;color:var(--wandb);">W&B Models</h3>
+      <p style="color:var(--muted);font-size:0.88rem;">Tracks every fine-tuning run, model version, and evaluation result. Full lineage from production data → training → deployment. Governance-ready with team collaboration and artifact versioning.</p>
+    </div>
+  </div>
+
+  <h3>Activation</h3>
+  <div class="code-block"><span class="comment"># Enable W&B integration with two env vars:</span>
+<span class="keyword">export</span> WANDB_API_KEY=<span class="string">"your-api-key"</span>
+<span class="keyword">export</span> WANDB_PROJECT=<span class="string">"data-flywheel"</span>   <span class="comment"># default project name</span>
+
+<span class="comment"># Models and datasets automatically version in the W&B registry</span>
+<span class="comment"># All NeMo evaluations log to W&B Weave for visualization</span></div>
+</div>
+
+<!-- ========================== BLUEPRINT 3: ORCHESTRATION ========================== -->
+<div class="section-divider"></div>
+<h2>Blueprint 3: Orchestration Layer (MLRun) <span class="sub">github.com/mlrun/nvidia-data-flywheel — what it adds on top</span></h2>
+
+<div class="card card-blue">
+  <p style="color:var(--text);font-size:0.95rem;margin-bottom:16px;">Another <strong>fork of Blueprint 1</strong> that replaces manual Celery task management with MLRun's full ML orchestration framework. Key additions:</p>
+
+  <div class="grid-2">
+    <div class="card" style="background:var(--code-bg);">
+      <h3 style="margin-top:0;color:var(--mlrun);">MLRun Orchestration</h3>
+      <p style="color:var(--muted);font-size:0.88rem;">Converts all Celery tasks into MLRun functions with automatic DAG visualization, retry logic, artifact tracking, and parallel execution. Claims 90% boilerplate reduction.</p>
+    </div>
+    <div class="card" style="background:var(--code-bg);">
+      <h3 style="margin-top:0;color:var(--mlrun);">Unique Files</h3>
+      <p style="color:var(--muted);font-size:0.88rem;"><code>project.yaml</code> — MLRun project definition<br><code>project_setup.py</code> — Initialization script<br><code>scripts/mlrun.sh</code> — Bootstrap installer<br><code>deploy/mlrun/Dockerfile</code> — Custom MLRun image<br><code>notebooks/mlrun-data-flywheel-tutorial.ipynb</code></p>
+    </div>
+  </div>
+
+  <h3>Roadmap (What's Coming)</h3>
+  <table>
+    <tr><th>Feature</th><th>Status</th><th>Impact</th></tr>
+    <tr><td>MLRun orchestration of core workflow</td><td style="color:var(--nvidia);">✅ Done</td><td>Replaces Celery with managed pipelines</td></tr>
+    <tr><td>Nuclio serverless functions</td><td style="color:var(--wandb);">🔜 Planned</td><td>Event-driven triggers instead of polling</td></tr>
+    <tr><td>MongoDB removal</td><td style="color:var(--wandb);">🔜 Planned</td><td>MLRun handles all state — simpler stack</td></tr>
+    <tr><td>Auto-logging for NeMo ops</td><td style="color:var(--wandb);">🔜 Planned</td><td>Zero-code observability</td></tr>
+    <tr><td>Multi-dataset generalization</td><td style="color:var(--wandb);">🔜 Planned</td><td>Run flywheels across different data types</td></tr>
+  </table>
+</div>
+
+<!-- ========================== COMPARISON TABLE ========================== -->
+<div class="section-divider"></div>
+<h2>Side-by-Side Comparison <span class="sub">What each blueprint provides and where they differ.</span></h2>
+
+<table>
+  <tr>
+    <th>Dimension</th>
+    <th style="color:var(--nvidia);">BP1: Core Engine</th>
+    <th style="color:var(--wandb);">BP2: + Observability</th>
+    <th style="color:var(--mlrun);">BP3: + Orchestration</th>
+  </tr>
+  <tr><td style="color:#fff;font-weight:600;">Publisher</td><td>NVIDIA</td><td>Weights & Biases</td><td>Iguazio / MLRun</td></tr>
+  <tr><td style="color:#fff;font-weight:600;">GitHub Repo</td><td>NVIDIA-AI-Blueprints/data-flywheel</td><td>wandb/data-flywheel-nvidia</td><td>mlrun/nvidia-data-flywheel</td></tr>
+  <tr><td style="color:#fff;font-weight:600;">Relationship</td><td>Original</td><td>Fork + W&B integration</td><td>Fork + MLRun integration</td></tr>
+  <tr><td style="color:#fff;font-weight:600;">Task Queue</td><td>Celery + Redis</td><td>Celery + Redis</td><td>MLRun pipelines</td></tr>
+  <tr><td style="color:#fff;font-weight:600;">Experiment Tracking</td><td>MLflow</td><td>W&B Models</td><td>MLRun built-in</td></tr>
+  <tr><td style="color:#fff;font-weight:600;">Production Tracing</td><td>Elasticsearch logs only</td><td>W&B Weave (full traces)</td><td>Elasticsearch logs only</td></tr>
+  <tr><td style="color:#fff;font-weight:600;">Min GPUs</td><td>2× H100/A100</td><td>2× H100/A100</td><td>2× H100/A100</td></tr>
+  <tr><td style="color:#fff;font-weight:600;">Unique Value</td><td>Complete reference implementation</td><td>Production monitoring + governance</td><td>Pipeline automation (90% less code)</td></tr>
+  <tr><td style="color:#fff;font-weight:600;">License</td><td>Apache 2.0 (orchestrator)</td><td>Apache 2.0</td><td>Apache 2.0</td></tr>
+  <tr><td style="color:#fff;font-weight:600;">Best For</td><td>Custom deployments</td><td>Teams needing audit trails</td><td>Teams wanting managed pipelines</td></tr>
+</table>
+
+<!-- ========================== REUSABLE COMPONENTS ========================== -->
+<div class="section-divider"></div>
+<h2>What's Directly Reusable <span class="sub">Code components you can extract and use in your own projects today.</span></h2>
+
+<div class="card card-green">
+  <h3 style="margin-top:0;">1. LLM-as-Judge Framework</h3>
+  <p style="color:var(--muted);font-size:0.92rem;margin-bottom:12px;"><code>src/lib/nemo/llm_as_judge.py</code> + <code>evaluator.py</code></p>
+  <p style="color:var(--text);font-size:0.92rem;">A complete framework for using LLMs to evaluate other LLMs. Includes custom metric definitions, task-specific benchmarks, and automated judging pipelines. This alone is worth extracting — most teams build this from scratch.</p>
+</div>
+
+<div class="card card-green">
+  <h3 style="margin-top:0;">2. OpenAI-Format Log Ingestion Pipeline</h3>
+  <p style="color:var(--muted);font-size:0.92rem;margin-bottom:12px;"><code>src/lib/integration/es_client.py</code> + <code>dataset_creator.py</code> + <code>openai_format_validator.py</code></p>
+  <p style="color:var(--text);font-size:0.92rem;">Production-tested pipeline that ingests OpenAI-format chat completion logs from Elasticsearch, validates them, and creates properly split train/eval datasets. Works with any OpenAI-compatible API output.</p>
+</div>
+
+<div class="card card-green">
+  <h3 style="margin-top:0;">3. NeMo Microservices Client Library</h3>
+  <p style="color:var(--muted);font-size:0.92rem;margin-bottom:12px;"><code>src/lib/nemo/customizer.py</code> + <code>dms_client.py</code> + <code>data_uploader.py</code></p>
+  <p style="color:var(--text);font-size:0.92rem;">Ready-to-use Python clients for NeMo Customizer (LoRA fine-tuning), NeMo Deployment Manager (NIM instance provisioning), and NeMo Datastore (dataset management). Saves weeks of integration work.</p>
+</div>
+
+<div class="card card-green">
+  <h3 style="margin-top:0;">4. In-Context Learning Example Selector</h3>
+  <p style="color:var(--muted);font-size:0.92rem;margin-bottom:12px;"><code>src/lib/flywheel/icl_selection.py</code></p>
+  <p style="color:var(--text);font-size:0.92rem;">Algorithm for selecting the best few-shot examples from production data for in-context learning experiments. This is a sophisticated component that dynamically picks the most relevant examples for each evaluation task.</p>
+</div>
+
+<div class="card card-green">
+  <h3 style="margin-top:0;">5. Async Job Management System</h3>
+  <p style="color:var(--muted);font-size:0.92rem;margin-bottom:12px;"><code>src/api/</code> + <code>src/tasks/</code> (complete module)</p>
+  <p style="color:var(--text);font-size:0.92rem;">A full FastAPI + Celery + MongoDB + Redis job management system with create/read/cancel/delete lifecycle, async processing, status tracking, and cleanup. Reusable pattern for any long-running ML pipeline.</p>
+</div>
+
+<!-- ========================== WHAT YOU CAN BUILD ========================== -->
+<div class="section-divider"></div>
+<h2>8 Products You Can Build On Top of This <span class="sub">Concrete business ideas leveraging these blueprints as foundations.</span></h2>
+
+<div class="card card-idea">
+  <div style="display:flex;align-items:center;margin-bottom:12px;">
+    <span class="idea-number">1</span>
+    <h3 style="margin:0;color:#fff;font-size:1.15rem;">Flywheel-as-a-Service (FaaS) Platform</h3>
+  </div>
+  <p style="color:var(--text);font-size:0.92rem;margin-bottom:8px;"><strong>Concept:</strong> Wrap the core blueprint behind a multi-tenant SaaS UI. Customers connect their LLM logs (any OpenAI-compatible API), and your platform automatically discovers cheaper/faster model alternatives through continuous evaluation and fine-tuning.</p>
+  <p style="color:var(--muted);font-size:0.88rem;"><strong>Why it works:</strong> The blueprint is open-source but requires 6 GPUs, Kubernetes expertise, and DevOps knowledge to deploy. 99% of companies can't set this up. Package it as a managed service at $500–$2,000/month per workload. The code is Apache 2.0 licensed — you can commercialize it.</p>
+  <div style="margin-top:8px;">
+    <span class="tag tag-idea">$50K–$200K/mo potential</span>
+    <span class="tag tag-tech">High complexity</span>
+    <span class="tag tag-nvidia">Uses all 3 blueprints</span>
+  </div>
+</div>
+
+<div class="card card-idea">
+  <div style="display:flex;align-items:center;margin-bottom:12px;">
+    <span class="idea-number">2</span>
+    <h3 style="margin:0;color:#fff;font-size:1.15rem;">LLM Cost Optimization Audit Service</h3>
+  </div>
+  <p style="color:var(--text);font-size:0.92rem;margin-bottom:8px;"><strong>Concept:</strong> Use the evaluation + LLM-as-judge framework to offer "AI cost audits" as a consulting service. Ingest a company's production LLM logs, run the flywheel evaluation against smaller/cheaper models, and deliver a report showing exactly how much they could save by switching models per workload.</p>
+  <p style="color:var(--muted);font-size:0.88rem;"><strong>Why it works:</strong> The blueprint showed 98.6% cost reduction potential. Most companies are overpaying for LLM inference — using 70B models where 8B would suffice. Charge $5K–$15K per audit. The code does the heavy lifting; you add the analysis and recommendation layer.</p>
+  <div style="margin-top:8px;">
+    <span class="tag tag-idea">$15K–$40K/mo potential</span>
+    <span class="tag tag-tech">Medium complexity</span>
+    <span class="tag tag-nvidia">Uses Blueprint 1 core</span>
+  </div>
+</div>
+
+<div class="card card-idea">
+  <div style="display:flex;align-items:center;margin-bottom:12px;">
+    <span class="idea-number">3</span>
+    <h3 style="margin:0;color:#fff;font-size:1.15rem;">Universal LLM Evaluation Platform</h3>
+  </div>
+  <p style="color:var(--text);font-size:0.92rem;margin-bottom:8px;"><strong>Concept:</strong> Extract the <code>llm_as_judge.py</code> + <code>evaluator.py</code> modules and build a standalone eval platform. Let teams define custom evaluation criteria, run automated LLM-judged evaluations against any model, and track results over time. Think "Braintrust or Humanloop competitor" built on NVIDIA's evaluation backbone.</p>
+  <p style="color:var(--muted);font-size:0.88rem;"><strong>Why it works:</strong> LLM evaluation is the #1 unsolved problem in AI ops. The blueprint has a production-grade evaluation framework that most teams spend months building. Add a UI, team collaboration, and API access. Charge $99–$499/month per team.</p>
+  <div style="margin-top:8px;">
+    <span class="tag tag-idea">$20K–$50K/mo potential</span>
+    <span class="tag tag-tech">Medium complexity</span>
+    <span class="tag tag-nvidia">Extracts eval modules</span>
+  </div>
+</div>
+
+<div class="card card-idea">
+  <div style="display:flex;align-items:center;margin-bottom:12px;">
+    <span class="idea-number">4</span>
+    <h3 style="margin:0;color:#fff;font-size:1.15rem;">AI Model A/B Testing Infrastructure</h3>
+  </div>
+  <p style="color:var(--text);font-size:0.92rem;margin-bottom:8px;"><strong>Concept:</strong> Use the NIM Proxy (routes inference across multiple models) and evaluation framework to build an A/B testing platform for LLM deployments. Companies deploy model variants, your platform splits traffic, evaluates quality automatically, and recommends which model to promote — all using production data.</p>
+  <p style="color:var(--muted);font-size:0.88rem;"><strong>Why it works:</strong> The blueprint already has model routing (NIM Proxy), evaluation (LLM-as-judge), and experiment tracking. No one has built a clean, product-grade A/B testing tool specifically for LLMs. Charge $299–$999/month.</p>
+  <div style="margin-top:8px;">
+    <span class="tag tag-idea">$15K–$30K/mo potential</span>
+    <span class="tag tag-tech">High complexity</span>
+    <span class="tag tag-nvidia">Uses NIM Proxy + Evaluator</span>
+  </div>
+</div>
+
+<div class="card card-idea">
+  <div style="display:flex;align-items:center;margin-bottom:12px;">
+    <span class="idea-number">5</span>
+    <h3 style="margin:0;color:#fff;font-size:1.15rem;">Fine-Tuning Pipeline Marketplace</h3>
+  </div>
+  <p style="color:var(--text);font-size:0.92rem;margin-bottom:8px;"><strong>Concept:</strong> Use the NeMo Customizer integration (<code>customizer.py</code>) to offer pre-built, one-click fine-tuning pipelines for specific use cases: customer support, code generation, medical Q&A, legal document analysis. Customers upload their data, select a pipeline, and get a fine-tuned model back.</p>
+  <p style="color:var(--muted);font-size:0.88rem;"><strong>Why it works:</strong> Fine-tuning is still too complex for most teams. The blueprint has the LoRA adaptation code ready. Package it with industry-specific evaluation criteria and data preparation scripts. Charge per fine-tuning run ($200–$500) or monthly subscription.</p>
+  <div style="margin-top:8px;">
+    <span class="tag tag-idea">$10K–$25K/mo potential</span>
+    <span class="tag tag-tech">Medium complexity</span>
+    <span class="tag tag-nvidia">Uses NeMo Customizer</span>
+  </div>
+</div>
+
+<div class="card card-idea">
+  <div style="display:flex;align-items:center;margin-bottom:12px;">
+    <span class="idea-number">6</span>
+    <h3 style="margin:0;color:#fff;font-size:1.15rem;">Production LLM Log Analytics Dashboard</h3>
+  </div>
+  <p style="color:var(--text);font-size:0.92rem;margin-bottom:8px;"><strong>Concept:</strong> Take the Elasticsearch ingestion pipeline (<code>es_client.py</code> + <code>openai_format_validator.py</code>) and build a purpose-built analytics dashboard for LLM production logs. Show token usage trends, cost per workload, latency percentiles, error rates, and quality scores — all from standard OpenAI-format logs.</p>
+  <p style="color:var(--muted);font-size:0.88rem;"><strong>Why it works:</strong> This is exactly the "AI Spend Management Dashboard" idea from the earlier research — and now you have the log ingestion and validation code ready. Pair with the LLM-as-judge for quality scoring. Charge $49–$199/month.</p>
+  <div style="margin-top:8px;">
+    <span class="tag tag-idea">$10K–$25K/mo potential</span>
+    <span class="tag tag-tech">Low-Medium complexity</span>
+    <span class="tag tag-nvidia">Uses integration modules</span>
+  </div>
+</div>
+
+<div class="card card-idea">
+  <div style="display:flex;align-items:center;margin-bottom:12px;">
+    <span class="idea-number">7</span>
+    <h3 style="margin:0;color:#fff;font-size:1.15rem;">Embedding Quality Improvement Service</h3>
+  </div>
+  <p style="color:var(--text);font-size:0.92rem;margin-bottom:8px;"><strong>Concept:</strong> The blueprint specifically supports an embedding optimization flywheel (not just LLMs) using <code>embedding.py</code>. Build a service that takes a company's RAG pipeline, evaluates embedding quality against their actual queries, and fine-tunes embedding models for 17–20% accuracy improvement using their production data.</p>
+  <p style="color:var(--muted);font-size:0.88rem;"><strong>Why it works:</strong> RAG pipelines are everywhere but embedding quality is rarely optimized. The blueprint already demonstrates 17–20% accuracy gains. Most RAG implementations use generic embeddings. Charge $2K–$5K per optimization engagement.</p>
+  <div style="margin-top:8px;">
+    <span class="tag tag-idea">$10K–$20K/mo potential</span>
+    <span class="tag tag-tech">Medium complexity</span>
+    <span class="tag tag-nvidia">Uses embedding flywheel</span>
+  </div>
+</div>
+
+<div class="card card-idea">
+  <div style="display:flex;align-items:center;margin-bottom:12px;">
+    <span class="idea-number">8</span>
+    <h3 style="margin:0;color:#fff;font-size:1.15rem;">Open-Source Flywheel Deployment & Support Business</h3>
+  </div>
+  <p style="color:var(--text);font-size:0.92rem;margin-bottom:8px;"><strong>Concept:</strong> Become THE deployment expert for these blueprints. Offer turnkey deployment services (Kubernetes setup, GPU provisioning, CI/CD integration), ongoing management, and premium support. The "Red Hat model" — the code is free, the expertise and reliability costs money.</p>
+  <p style="color:var(--muted);font-size:0.88rem;"><strong>Why it works:</strong> These blueprints require Kubernetes + 6 GPUs + NeMo microservices + multiple databases. The gap between "cool open-source project" and "running in production" is enormous. Charge $5K–$15K for deployment + $2K–$5K/month managed support.</p>
+  <div style="margin-top:8px;">
+    <span class="tag tag-idea">$15K–$40K/mo potential</span>
+    <span class="tag tag-tech">Low code, high DevOps</span>
+    <span class="tag tag-nvidia">All 3 blueprints</span>
+  </div>
+</div>
+
+<!-- ========================== QUICK START ========================== -->
+<div class="section-divider"></div>
+<h2>Quick Start: Where to Begin <span class="sub">If you want to start building TODAY, here's the fastest path.</span></h2>
+
+<div class="card" style="border-left:4px solid #a855f7;">
+  <h3 style="margin-top:0;color:#a855f7;">Fastest Path to Revenue (Ideas #2 + #6)</h3>
+  <div class="code-block"><span class="comment"># Step 1: Clone the core blueprint</span>
+git clone https://github.com/NVIDIA-AI-Blueprints/data-flywheel.git
+
+<span class="comment"># Step 2: Focus on these extractable modules:</span>
+<span class="comment">#   → src/lib/nemo/llm_as_judge.py     (evaluation framework)</span>
+<span class="comment">#   → src/lib/nemo/evaluator.py         (model comparison)</span>
+<span class="comment">#   → src/lib/integration/es_client.py  (log ingestion)</span>
+<span class="comment">#   → src/lib/integration/dataset_creator.py (data preparation)</span>
+
+<span class="comment"># Step 3: Build a lightweight UI on top (React/Next.js)</span>
+<span class="comment"># Step 4: Offer as either:</span>
+<span class="comment">#   → Consulting service (LLM cost audits) — revenue in weeks</span>
+<span class="comment">#   → SaaS product (log analytics dashboard) — revenue in months</span></div>
+</div>
+
+</div>
+</body>
+</html>
