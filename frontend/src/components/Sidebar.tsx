@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { BarChart3, Layers, Lightbulb, Settings, CreditCard, LogOut, Zap, X } from "lucide-react";
+import { BarChart3, Layers, Lightbulb, Settings, CreditCard, LogOut, Zap, X, Shield } from "lucide-react";
 import { Badge } from "@/components/ui";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProject } from "@/contexts/ProjectContext";

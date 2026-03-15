@@ -119,6 +119,11 @@ export default function LoginPage() {
               </button>
             </div>
           </div>
+          <div className="flex justify-end">
+            <Link href="/forgot-password" className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">
+              Forgot password?
+            </Link>
+          </div>
           <Btn type="submit" variant="primary" size="lg" className="w-full" disabled={submitting}>
             {submitting ? "Signing in..." : "Sign in"}
             {!submitting && <ArrowRight size={16} />}

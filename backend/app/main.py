@@ -15,6 +15,9 @@ from app.api.ingest_routes import router as ingest_router
 from app.api.suggestion_routes import router as suggestion_router
 from app.api.billing_routes import router as billing_router
 from app.api.stats_routes import router as stats_router
+from app.api.password_reset_routes import router as password_reset_router
+from app.api.webhooks import router as webhooks_router
+from app.api.admin_routes import router as admin_router
 
 # Import all models so Base.metadata knows about them
 import app.models  # noqa: F401
@@ -30,9 +33,10 @@ logging.basicConfig(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Create tables on startup (dev convenience — use Alembic in production)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    # Create tables on startup (dev convenience — Alembic handles prod)
+    if settings.ENVIRONMENT == "development":
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
     # Seed default plans
     await _seed_plans()
     # Start background scheduler
@@ -41,7 +45,7 @@ async def lifespan(app: FastAPI):
         start_scheduler()
         logger.info("Background scheduler started")
     except Exception as e:
-        logger.warning(f"Scheduler failed to start (non-fatal): {e}")
+        logger.error(f"Scheduler failed to start: {e}")
     yield
     await engine.dispose()
 
@@ -67,7 +71,18 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS - allow configured frontend + any extra origins
+# ── Rate limiting ─────────────────────────────────────────────────────────────
+try:
+    from app.middleware.rate_limit import limiter, rate_limit_exceeded_handler
+    from slowapi.errors import RateLimitExceeded
+    from slowapi import _rate_limit_exceeded_handler
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+    logger.info("Rate limiting enabled")
+except Exception as e:
+    logger.warning(f"Rate limiting not available: {e}")
+
+# ── CORS ──────────────────────────────────────────────────────────────────────
 allowed_origins = [settings.FRONTEND_URL]
 if settings.ALLOWED_ORIGINS:
     allowed_origins.extend([o.strip() for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()])
@@ -82,7 +97,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Register routers
+# ── Register routers ─────────────────────────────────────────────────────────
 app.include_router(auth_router)
 app.include_router(project_router)
 app.include_router(feature_router)
@@ -90,11 +105,15 @@ app.include_router(ingest_router)
 app.include_router(suggestion_router)
 app.include_router(billing_router)
 app.include_router(stats_router)
+app.include_router(password_reset_router)
+app.include_router(webhooks_router)
+app.include_router(admin_router)
 
 
+# ── Health check ─────────────────────────────────────────────────────────────
 @app.get("/health")
 async def health():
-    return {"status": "ok", "version": settings.APP_VERSION}
+    return {"status": "ok", "version": settings.APP_VERSION, "environment": settings.ENVIRONMENT}
 
 
 @app.get("/api/config")
@@ -102,4 +121,5 @@ async def public_config():
     """Public config for the frontend — which features are available."""
     return {
         "google_oauth": bool(settings.GOOGLE_CLIENT_ID),
+        "stripe_enabled": bool(settings.STRIPE_SECRET_KEY),
     }

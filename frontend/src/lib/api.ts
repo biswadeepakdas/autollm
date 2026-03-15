@@ -27,7 +27,7 @@ export class ApiError extends Error {
 // ── Config ────────────────────────────────────────────────────────────────────
 
 export const config = {
-  get: () => request<{ google_oauth: boolean }>('/api/config'),
+  get: () => request<{ google_oauth: boolean; stripe_enabled: boolean }>('/api/config'),
 };
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
@@ -41,6 +41,12 @@ export const auth = {
   me: () => request<any>('/api/auth/me'),
   refresh: () => request('/api/auth/refresh', { method: 'POST' }),
   googleUrl: () => request<{ url: string }>('/api/auth/google'),
+  forgotPassword: (email: string) =>
+    request('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
+  resetPassword: (token: string, new_password: string) =>
+    request('/api/auth/reset-password', { method: 'POST', body: JSON.stringify({ token, new_password }) }),
+  verifyResetToken: (token: string) =>
+    request<{ valid: boolean }>('/api/auth/verify-reset-token', { method: 'POST', body: JSON.stringify({ token }) }),
 };
 
 // ── Projects ────────────────────────────────────────────────────────────────
@@ -91,4 +97,16 @@ export const billing = {
   subscription: () => request<any>('/api/billing/subscription'),
   changePlan: (planCode: string) =>
     request('/api/billing/change-plan', { method: 'POST', body: JSON.stringify({ plan_code: planCode }) }),
+  portal: () => request<{ url: string }>('/api/billing/portal', { method: 'POST' }),
+};
+
+// ── Admin ──────────────────────────────────────────────────────────────────
+
+export const admin = {
+  stats: () => request<any>('/api/admin/stats'),
+  users: (page = 1, perPage = 20) => request<any>(`/api/admin/users?page=${page}&per_page=${perPage}`),
+  changeUserPlan: (userId: string, planCode: string) =>
+    request('/api/admin/users/' + userId + '/plan?plan_code=' + planCode, { method: 'PATCH' }),
+  toggleAdmin: (userId: string) =>
+    request('/api/admin/users/' + userId + '/admin', { method: 'PATCH' }),
 };

@@ -46,6 +46,20 @@ class Settings(BaseSettings):
     # ── Stripe (stubbed) ───────────────────────────────────────────────────────
     STRIPE_SECRET_KEY: Optional[str] = None
     STRIPE_WEBHOOK_SECRET: Optional[str] = None
+    STRIPE_PRICE_ID_PRO: Optional[str] = None
+    STRIPE_PRICE_ID_MAX: Optional[str] = None
+
+    # ── Email (SendGrid / SMTP) ──────────────────────────────────────────────
+    SENDGRID_API_KEY: Optional[str] = None
+    EMAIL_FROM: str = "noreply@autollm.com"
+    EMAIL_FROM_NAME: str = "AutoLLM"
+
+    # ── Rate Limiting ────────────────────────────────────────────────────────
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_DEFAULT: str = "100/minute"
+
+    # ── Password Reset ───────────────────────────────────────────────────────
+    PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: int = 60
 
     class Config:
         env_file = ".env"

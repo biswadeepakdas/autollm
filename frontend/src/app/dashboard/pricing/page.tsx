@@ -15,8 +15,12 @@ export default function PricingPage() {
 
   const handleChangePlan = async (planCode: string) => {
     try {
-      await billing.changePlan(planCode);
-      window.location.reload();
+      const result: any = await billing.changePlan(planCode);
+      if (result.checkout_url) {
+        window.location.href = result.checkout_url;
+      } else {
+        window.location.reload();
+      }
     } catch {
       // handle error
     }

@@ -6,6 +6,7 @@ from app.models.llm_request import LLMRequest
 from app.models.stats import FeatureStatsDaily, ProjectMonthlyUsage
 from app.models.suggestion import Suggestion
 from app.models.project_setting import ProjectSetting
+from app.models.password_reset_token import PasswordResetToken
 
 __all__ = [
     "User", "OAuthAccount",
@@ -16,4 +17,5 @@ __all__ = [
     "FeatureStatsDaily", "ProjectMonthlyUsage",
     "Suggestion",
     "ProjectSetting",
+    "PasswordResetToken",
 ]

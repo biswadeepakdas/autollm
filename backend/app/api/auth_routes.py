@@ -97,6 +97,13 @@ async def register(body: RegisterRequest, response: Response, db: AsyncSession =
 
     user = await _assign_free_plan(db, user)
 
+    # Send welcome email (fire-and-forget)
+    try:
+        from app.services.email_service import send_welcome_email
+        await send_welcome_email(user.email, user.name)
+    except Exception:
+        pass  # non-blocking
+
     access = create_access_token(user.id, user.email)
     refresh = create_refresh_token(user.id)
     _set_auth_cookies(response, access, refresh)
