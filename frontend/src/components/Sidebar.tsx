@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { BarChart3, Layers, Lightbulb, Settings, CreditCard, LogOut, Zap, X, Shield } from "lucide-react";
-import { Badge } from "@/components/ui";
+
 import { useAuth } from "@/contexts/AuthContext";
 import { useProject } from "@/contexts/ProjectContext";
 
@@ -103,12 +103,13 @@ export function Sidebar({ mobileOpen, setMobileOpen, suggestionCount = 0 }: Side
               <p className="text-xs text-gray-400 truncate">{user.email}</p>
             </div>
           </div>
-          <div className="flex items-center justify-between">
-            <Badge variant="info">Pro plan</Badge>
-            <button onClick={handleLogout} className="text-gray-400 hover:text-gray-600 transition">
-              <LogOut size={16} />
-            </button>
-          </div>
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-gray-500 hover:text-red-600 hover:bg-red-50 transition-all duration-150"
+          >
+            <LogOut size={16} />
+            Sign out
+          </button>
         </div>
       )}
     </div>
