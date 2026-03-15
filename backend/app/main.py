@@ -33,10 +33,9 @@ logging.basicConfig(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Create tables on startup (dev convenience — Alembic handles prod)
-    if settings.ENVIRONMENT == "development":
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+    # Create/update tables on startup (safe: create_all is idempotent)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
     # Seed default plans
     await _seed_plans()
     # Start background scheduler
