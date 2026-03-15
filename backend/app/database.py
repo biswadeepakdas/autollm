@@ -6,7 +6,7 @@ from sqlalchemy.orm import DeclarativeBase
 from app.config import settings
 
 engine = create_async_engine(
-    settings.DATABASE_URL,
+    settings.ASYNC_DATABASE_URL,
     echo=settings.DATABASE_ECHO,
     pool_size=20,
     max_overflow=10,
@@ -20,7 +20,7 @@ class Base(DeclarativeBase):
 
 
 async def get_db() -> AsyncSession:
-    """FastAPI dependency — yields a transactional session."""
+    """FastAPI dependency -- yields a transactional session."""
     async with async_session() as session:
         try:
             yield session
