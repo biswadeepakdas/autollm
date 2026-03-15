@@ -67,8 +67,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS - allow configured frontend + common dev origins
+# CORS - allow configured frontend + any extra origins
 allowed_origins = [settings.FRONTEND_URL]
+if settings.ALLOWED_ORIGINS:
+    allowed_origins.extend([o.strip() for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()])
 if settings.ENVIRONMENT == "development":
     allowed_origins.extend(["http://localhost:3000", "http://localhost:5173"])
 

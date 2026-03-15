@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change-me-in-production-use-openssl-rand-hex-32"
     FRONTEND_URL: str = "http://localhost:3000"
     BACKEND_URL: str = "http://localhost:8000"
+    ALLOWED_ORIGINS: str = ""  # comma-separated extra origins, e.g. "https://myapp.up.railway.app"
 
     # ── Database ────────────────────────────────────────────────────────────────
     DATABASE_URL: str = "postgresql+asyncpg://autollm:autollm@localhost:5432/autollm"
