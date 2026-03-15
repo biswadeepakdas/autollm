@@ -30,12 +30,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const setAuthCookie = (loggedIn: boolean) => {
+    if (loggedIn) {
+      document.cookie = "autollm_logged_in=1; path=/; max-age=86400; samesite=lax";
+    } else {
+      document.cookie = "autollm_logged_in=; path=/; max-age=0";
+    }
+  };
+
   const fetchMe = useCallback(async () => {
     try {
       const data = await authApi.me();
       setUser(data);
+      setAuthCookie(true);
     } catch {
       setUser(null);
+      setAuthCookie(false);
     } finally {
       setLoading(false);
     }
@@ -74,6 +84,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await authApi.logout();
     } finally {
       setUser(null);
+      setAuthCookie(false);
     }
   };
 

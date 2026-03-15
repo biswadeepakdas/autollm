@@ -1,5 +1,6 @@
 """AutoLLM backend — FastAPI application entry point."""
 
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -18,6 +19,14 @@ from app.api.stats_routes import router as stats_router
 # Import all models so Base.metadata knows about them
 import app.models  # noqa: F401
 
+logger = logging.getLogger(__name__)
+
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG if settings.DEBUG else logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -26,6 +35,13 @@ async def lifespan(app: FastAPI):
         await conn.run_sync(Base.metadata.create_all)
     # Seed default plans
     await _seed_plans()
+    # Start background scheduler
+    try:
+        from app.worker.scheduler import start_scheduler
+        start_scheduler()
+        logger.info("Background scheduler started")
+    except Exception as e:
+        logger.warning(f"Scheduler failed to start (non-fatal): {e}")
     yield
     await engine.dispose()
 
@@ -42,6 +58,7 @@ async def _seed_plans():
             if not result.scalar_one_or_none():
                 session.add(Plan(**plan_data))
         await session.commit()
+    logger.info("Plans seeded")
 
 
 app = FastAPI(
@@ -50,10 +67,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS
+# CORS - allow configured frontend + common dev origins
+allowed_origins = [settings.FRONTEND_URL]
+if settings.ENVIRONMENT == "development":
+    allowed_origins.extend(["http://localhost:3000", "http://localhost:5173"])
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.FRONTEND_URL, "http://localhost:3000", "http://localhost:5173"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

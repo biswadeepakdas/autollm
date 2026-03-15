@@ -166,12 +166,12 @@ export default function OverviewPage() {
         <Card className="p-6">
           <div className="flex items-center justify-between mb-5">
             <h3 className="font-semibold text-gray-900">Plan usage this month</h3>
-            <Badge variant="info">{usage.plan_name || "Free"} plan</Badge>
+            <Badge variant="info">{usage?.plan?.name || "Free"} plan</Badge>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <UsageBar label="Monthly requests" current={usage.request_count || 0} max={usage.request_limit || 5000} />
-            <UsageBar label="Projects" current={usage.project_count || 0} max={usage.project_limit || 1} />
-            <UsageBar label="Features (this project)" current={usage.feature_count || 0} max={usage.feature_limit || 5} />
+            <UsageBar label="Monthly requests" current={usage?.usage?.requests?.current || 0} max={usage?.usage?.requests?.limit || 5000} />
+            <UsageBar label="Projects" current={usage?.usage?.projects?.current || 0} max={usage?.usage?.projects?.limit || 1} />
+            <UsageBar label="Features (this project)" current={usage?.usage?.features?.current || 0} max={usage?.usage?.features?.limit || 5} />
           </div>
         </Card>
       )}

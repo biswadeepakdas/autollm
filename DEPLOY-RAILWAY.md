@@ -58,6 +58,7 @@ git push -u origin main
 DATABASE_URL=${{Postgres.DATABASE_URL}}
 REDIS_URL=${{Redis.REDIS_URL}}
 SECRET_KEY=<generate with: openssl rand -hex 32>
+ENVIRONMENT=production
 FRONTEND_URL=https://<your-frontend>.up.railway.app
 BACKEND_URL=https://<your-backend>.up.railway.app
 GOOGLE_CLIENT_ID=<from Google Cloud Console, optional>

@@ -12,7 +12,7 @@ export function middleware(request: NextRequest) {
   }
 
   // Check for auth cookie (access_token set by backend as httpOnly cookie)
-  const token = request.cookies.get("access_token");
+  const token = request.cookies.get("autollm_logged_in");
   if (!token) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("redirect", pathname);

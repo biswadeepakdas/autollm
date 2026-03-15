@@ -38,7 +38,10 @@ async def get_current_user(
 
     user_id = uuid.UUID(payload["sub"])
     result = await db.execute(
-        select(User).options(selectinload(User.subscription).selectinload(UserSubscription.plan)).where(User.id == user_id)
+        select(User).options(
+            selectinload(User.subscription).selectinload(UserSubscription.plan),
+            selectinload(User.oauth_accounts),
+        ).where(User.id == user_id)
     )
     user = result.scalar_one_or_none()
     if not user or not user.is_active:

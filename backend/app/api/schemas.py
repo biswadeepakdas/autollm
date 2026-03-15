@@ -28,6 +28,8 @@ class UserResponse(BaseModel):
     name: Optional[str]
     plan_name: Optional[str] = None
     plan_code: Optional[str] = None
+    has_password: bool = True
+    oauth_providers: list[str] = []
     created_at: datetime
 
     class Config:

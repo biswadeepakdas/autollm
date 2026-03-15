@@ -1,5 +1,6 @@
 """Background aggregation job — rolls up LLM requests into daily stats."""
 
+import logging
 from datetime import date, datetime, timezone, timedelta
 import asyncio
 
@@ -11,6 +12,8 @@ from app.models.llm_request import LLMRequest
 from app.models.feature import Feature
 from app.models.stats import FeatureStatsDaily
 from app.models.project import Project
+
+logger = logging.getLogger(__name__)
 
 
 async def aggregate_daily_stats(target_date: date | None = None):
@@ -33,8 +36,8 @@ async def aggregate_daily_stats(target_date: date | None = None):
                 func.sum(LLMRequest.cost_cents).label("total_cost_cents"),
                 func.sum(LLMRequest.estimated_savings_cents).label("total_savings_cents"),
                 func.avg(LLMRequest.latency_ms).label("avg_latency_ms"),
-                func.sum(func.cast(LLMRequest.status_code >= 400, type_=func.literal_column("int"))).label("error_count"),
-                func.sum(func.cast(LLMRequest.was_rerouted, type_=func.literal_column("int"))).label("rerouted_count"),
+                func.count().filter(LLMRequest.status_code >= 400).label("error_count"),
+                func.count().filter(LLMRequest.was_rerouted == True).label("rerouted_count"),
             )
             .where(
                 LLMRequest.feature_id.isnot(None),
@@ -101,7 +104,7 @@ async def aggregate_daily_stats(target_date: date | None = None):
                 stat.top_models = ",".join(top_models)
 
         await db.commit()
-        print(f"[Aggregator] Processed {len(rows)} features for {target_date}")
+        logger.info(f"Processed {len(rows)} features for {target_date}")
 
 
 def run_aggregation(target_date: date | None = None):

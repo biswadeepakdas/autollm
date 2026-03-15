@@ -10,7 +10,7 @@ export default function PricingPage() {
   const { data: plans, loading: plansLoading } = useApiData(() => billing.plans(), []);
   const { data: subscription, loading: subLoading } = useApiData(() => billing.subscription(), []);
 
-  const currentCode = subscription?.plan?.code || "plan_free";
+  const currentCode = subscription?.code || "plan_free";
   const loading = plansLoading || subLoading;
 
   const handleChangePlan = async (planCode: string) => {
@@ -31,9 +31,9 @@ export default function PricingPage() {
   }
 
   const planList = plans || [
-    { name: "Free", code: "plan_free", price_cents: 0, monthly_request_limit: 5000, max_projects: 1, max_features_per_project: 5, auto_mode_enabled: false, support_tier: "Community" },
-    { name: "Pro", code: "plan_pro", price_cents: 4900, monthly_request_limit: 100000, max_projects: 5, max_features_per_project: 50, auto_mode_enabled: true, support_tier: "Email" },
-    { name: "Max", code: "plan_max", price_cents: 14900, monthly_request_limit: 1000000, max_projects: 20, max_features_per_project: 200, auto_mode_enabled: true, support_tier: "Priority" },
+    { name: "Free", code: "plan_free", price_monthly_cents: 0, monthly_request_limit: 5000, max_projects: 1, max_features_per_project: 5, auto_mode_enabled: false, support_tier: "Community" },
+    { name: "Pro", code: "plan_pro", price_monthly_cents: 4900, monthly_request_limit: 100000, max_projects: 5, max_features_per_project: 50, auto_mode_enabled: true, support_tier: "Email" },
+    { name: "Max", code: "plan_max", price_monthly_cents: 14900, monthly_request_limit: 1000000, max_projects: 20, max_features_per_project: 200, auto_mode_enabled: true, support_tier: "Priority" },
   ];
 
   return (
@@ -48,7 +48,7 @@ export default function PricingPage() {
         {planList.map((p: any) => {
           const isCurrent = p.code === currentCode;
           const isPop = p.code === "plan_pro";
-          const price = Math.round((p.price_cents || 0) / 100);
+          const price = Math.round((p.price_monthly_cents || 0) / 100);
 
           return (
             <Card

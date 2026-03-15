@@ -61,7 +61,7 @@ async def get_overview(
         .group_by(FeatureStatsDaily.stat_date)
         .order_by(FeatureStatsDaily.stat_date)
     )
-    daily = [{"date": str(r.stat_date), "requests": r.requests or 0, "cost": r.cost or 0, "savings": r.savings or 0} for r in result]
+    daily = [{"date": str(r.stat_date), "requests": r.requests or 0, "cost_cents": float(r.cost or 0), "savings_cents": float(r.savings or 0)} for r in result]
 
     # Top models by cost
     result = await db.execute(
@@ -79,12 +79,12 @@ async def get_overview(
     top_models = [{"provider": r.provider, "model": r.model, "count": r.count, "cost_cents": float(r.total_cost or 0)} for r in result]
 
     return {
-        "summary": {
-            "total_requests": int(row.total_requests or 0),
+        "totals": {
+            "cost_cents": float(row.total_cost or 0),
+            "savings_cents": float(row.total_savings or 0),
+            "request_count": int(row.total_requests or 0),
             "total_tokens": int(row.total_tokens or 0),
-            "total_cost_cents": float(row.total_cost or 0),
-            "total_savings_cents": float(row.total_savings or 0),
-            "avg_latency_ms": float(row.avg_latency or 0),
+            "avg_latency_ms": round(float(row.avg_latency or 0), 1),
             "total_errors": int(row.total_errors or 0),
             "total_rerouted": int(row.total_rerouted or 0),
         },

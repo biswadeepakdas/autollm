@@ -1,6 +1,7 @@
 """Suggestion engine — generates cost-saving recommendations (the 5 Auto mode rules)."""
 
 import asyncio
+import logging
 from datetime import date, timedelta, timezone, datetime
 
 from sqlalchemy import select, func
@@ -17,6 +18,8 @@ from app.services.cost_engine import (
     estimate_cost_cents, MODEL_PRICING,
 )
 
+logger = logging.getLogger(__name__)
+
 
 async def generate_suggestions():
     """Run all 5 suggestion rules across all projects. Run daily."""
@@ -25,14 +28,17 @@ async def generate_suggestions():
         projects = result.scalars().all()
 
         for project in projects:
-            await _rule_1_model_downgrade(db, project)
-            await _rule_2_token_cap(db, project)
-            await _rule_3_low_value_features(db, project)
-            await _rule_4_provider_mix(db, project)
-            await _rule_5_budget_alert(db, project)
+            try:
+                await _rule_1_model_downgrade(db, project)
+                await _rule_2_token_cap(db, project)
+                await _rule_3_low_value_features(db, project)
+                await _rule_4_provider_mix(db, project)
+                await _rule_5_budget_alert(db, project)
+            except Exception as e:
+                logger.error(f"Error generating suggestions for project {project.id}: {e}")
 
         await db.commit()
-        print(f"[Suggestions] Processed {len(projects)} projects")
+        logger.info(f"Processed {len(projects)} projects for suggestions")
 
 
 async def _rule_1_model_downgrade(db: AsyncSession, project: Project):
@@ -109,7 +115,6 @@ async def _rule_2_token_cap(db: AsyncSession, project: Project):
             LLMRequest.feature_id,
             func.avg(LLMRequest.completion_tokens).label("avg_comp"),
             func.max(LLMRequest.completion_tokens).label("max_comp"),
-            func.percentile_cont(0.95).within_group(LLMRequest.completion_tokens).label("p95_comp"),
             func.count().label("count"),
         )
         .where(LLMRequest.project_id == project.id, LLMRequest.created_at >= since, LLMRequest.feature_id.isnot(None))
@@ -119,8 +124,8 @@ async def _rule_2_token_cap(db: AsyncSession, project: Project):
 
     for row in result:
         if row.max_comp and row.avg_comp and row.max_comp > row.avg_comp * 3:
-            # High variance — suggest a cap at p95
-            cap = int(row.p95_comp) if row.p95_comp else int(row.avg_comp * 2)
+            # High variance — suggest a cap at avg*2
+            cap = int(row.avg_comp * 2)
             savings_estimate = (row.max_comp - cap) * 0.001 * row.count  # rough
 
             existing = await db.execute(

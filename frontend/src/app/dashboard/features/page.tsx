@@ -84,7 +84,7 @@ export default function FeaturesPage() {
       ) : (
         <div className="space-y-3">
           {(featureList || []).map((f: any) => {
-            const autoOn = autos[f.id] ?? f.settings?.auto_mode ?? false;
+            const autoOn = autos[f.id] ?? f.auto_mode ?? false;
             return (
               <Card key={f.id} className="p-5 hover:border-gray-200 transition-colors">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

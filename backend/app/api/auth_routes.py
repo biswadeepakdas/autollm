@@ -31,12 +31,15 @@ def _user_response(user: User) -> UserResponse:
     if user.subscription and user.subscription.plan:
         plan_name = user.subscription.plan.name
         plan_code = user.subscription.plan.code
+    oauth_providers = [oa.provider for oa in user.oauth_accounts] if user.oauth_accounts else []
     return UserResponse(
         id=user.id,
         email=user.email,
         name=user.name,
         plan_name=plan_name,
         plan_code=plan_code,
+        has_password=user.password_hash is not None,
+        oauth_providers=oauth_providers,
         created_at=user.created_at,
     )
 
@@ -58,8 +61,21 @@ async def _assign_free_plan(db: AsyncSession, user: User) -> None:
 
 
 def _set_auth_cookies(response: Response, access: str, refresh: str) -> None:
-    response.set_cookie("access_token", access, httponly=True, samesite="lax", max_age=3600, secure=False)
-    response.set_cookie("refresh_token", refresh, httponly=True, samesite="lax", max_age=86400 * 30, secure=False)
+    is_prod = settings.ENVIRONMENT == "production"
+    response.set_cookie(
+        "access_token", access,
+        httponly=True,
+        samesite="none" if is_prod else "lax",
+        max_age=3600,
+        secure=is_prod,
+    )
+    response.set_cookie(
+        "refresh_token", refresh,
+        httponly=True,
+        samesite="none" if is_prod else "lax",
+        max_age=86400 * 30,
+        secure=is_prod,
+    )
 
 
 # ── Register ─────────────────────────────────────────────────────────────────
@@ -93,7 +109,10 @@ async def register(body: RegisterRequest, response: Response, db: AsyncSession =
 @router.post("/login", response_model=AuthResponse)
 async def login(body: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
-        select(User).options(selectinload(User.subscription).selectinload(UserSubscription.plan)).where(User.email == body.email)
+        select(User).options(
+            selectinload(User.subscription).selectinload(UserSubscription.plan),
+            selectinload(User.oauth_accounts),
+        ).where(User.email == body.email)
     )
     user = result.scalar_one_or_none()
     if not user or not user.password_hash or not verify_password(body.password, user.password_hash):

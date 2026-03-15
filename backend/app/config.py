@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     APP_NAME: str = "AutoLLM"
     APP_VERSION: str = "0.1.0"
     DEBUG: bool = False
+    ENVIRONMENT: str = "development"  # "development" or "production"
     SECRET_KEY: str = "change-me-in-production-use-openssl-rand-hex-32"
     FRONTEND_URL: str = "http://localhost:3000"
     BACKEND_URL: str = "http://localhost:8000"
