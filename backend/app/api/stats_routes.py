@@ -22,7 +22,7 @@ router = APIRouter(prefix="/api/projects/{project_id}/stats", tags=["stats"])
 async def get_overview(
     project_id: uuid.UUID,
     days: int = Query(default=30, ge=1, le=90),
-    user: CurrentUser = Depends(),
+    user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ):
     """High-level dashboard overview stats."""
@@ -97,7 +97,7 @@ async def get_overview(
 async def get_feature_stats(
     project_id: uuid.UUID,
     days: int = Query(default=30, ge=1, le=90),
-    user: CurrentUser = Depends(),
+    user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ):
     """Per-feature breakdown."""
