@@ -95,3 +95,11 @@ app.include_router(stats_router)
 @app.get("/health")
 async def health():
     return {"status": "ok", "version": settings.APP_VERSION}
+
+
+@app.get("/api/config")
+async def public_config():
+    """Public config for the frontend — which features are available."""
+    return {
+        "google_oauth": bool(settings.GOOGLE_CLIENT_ID),
+    }

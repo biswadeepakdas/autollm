@@ -24,6 +24,12 @@ export class ApiError extends Error {
   }
 }
 
+// ── Config ────────────────────────────────────────────────────────────────────
+
+export const config = {
+  get: () => request<{ google_oauth: boolean }>('/api/config'),
+};
+
 // ── Auth ─────────────────────────────────────────────────────────────────────
 
 export const auth = {

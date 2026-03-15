@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Zap, ArrowRight, Eye, EyeOff } from "lucide-react";
 import { Card, Btn, GoogleIcon } from "@/components/ui";
 import { useAuth } from "@/contexts/AuthContext";
+import { config } from "@/lib/api";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -15,6 +16,11 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [googleEnabled, setGoogleEnabled] = useState(false);
+
+  useEffect(() => {
+    config.get().then(c => setGoogleEnabled(c.google_oauth)).catch(() => {});
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,17 +60,21 @@ export default function RegisterPage() {
           </div>
         </div>
 
-        <button
-          onClick={loginWithGoogle}
-          className="w-full flex items-center justify-center gap-3 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-all"
-        >
-          <GoogleIcon /> Continue with Google
-        </button>
+        {googleEnabled && (
+          <>
+            <button
+              onClick={loginWithGoogle}
+              className="w-full flex items-center justify-center gap-3 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-all"
+            >
+              <GoogleIcon /> Continue with Google
+            </button>
 
-        <div className="relative my-6">
-          <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200" /></div>
-          <div className="relative flex justify-center"><span className="px-3 bg-white text-xs text-gray-400">or continue with email</span></div>
-        </div>
+            <div className="relative my-6">
+              <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200" /></div>
+              <div className="relative flex justify-center"><span className="px-3 bg-white text-xs text-gray-400">or continue with email</span></div>
+            </div>
+          </>
+        )}
 
         {error && (
           <div className="mb-4 p-3 bg-red-50 border border-red-100 rounded-xl text-sm text-red-700">{error}</div>

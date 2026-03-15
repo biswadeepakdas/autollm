@@ -93,8 +93,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { url } = await authApi.googleUrl();
       window.location.href = url;
     } catch (e) {
-      const msg = e instanceof ApiError ? e.message : "Failed to start Google login";
-      setError(msg);
+      if (e instanceof ApiError && e.status === 501) {
+        setError("Google sign-in is not configured. Please use email/password.");
+      } else {
+        const msg = e instanceof ApiError ? e.message : "Failed to start Google login";
+        setError(msg);
+      }
     }
   };
 
