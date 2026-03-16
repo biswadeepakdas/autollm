@@ -1,12 +1,19 @@
 """AutoLLM backend — FastAPI application entry point."""
 
-import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+from app.logging_config import setup_logging, get_logger
+
+# ── Initialise structured logging before anything else ────────────────────────
+setup_logging(
+    log_level="DEBUG" if settings.DEBUG else "INFO",
+)
+logger = get_logger(__name__)
+
 from app.database import engine, Base
 from app.api.auth_routes import router as auth_router
 from app.api.project_routes import router as project_router
@@ -21,14 +28,6 @@ from app.api.admin_routes import router as admin_router
 
 # Import all models so Base.metadata knows about them
 import app.models  # noqa: F401
-
-logger = logging.getLogger(__name__)
-
-# Configure logging
-logging.basicConfig(
-    level=logging.DEBUG if settings.DEBUG else logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
 
 
 @asynccontextmanager
@@ -123,6 +122,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Request logging middleware ────────────────────────────────────────────────
+try:
+    from app.middleware.request_logging import RequestLoggingMiddleware
+    app.add_middleware(RequestLoggingMiddleware)
+    logger.info("Request logging middleware enabled")
+except Exception as e:
+    logger.warning("Request logging middleware not available", error=str(e))
 
 # ── Register routers ─────────────────────────────────────────────────────────
 app.include_router(auth_router)

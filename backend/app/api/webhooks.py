@@ -1,11 +1,12 @@
 """Webhook routes — Stripe webhook handling."""
 
-import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Request, HTTPException
 
-logger = logging.getLogger(__name__)
+from app.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/webhooks", tags=["webhooks"])
 
@@ -89,11 +90,11 @@ async def stripe_webhook(request: Request):
         event_id = _get_event_field(event, "id")
         event_type = _get_event_field(event, "type")
 
-        logger.info(f"Stripe webhook received: {event_type} (id={event_id})")
+        logger.info("stripe_webhook_received", event_type=event_type, event_id=event_id)
 
         # ── Idempotency check ────────────────────────────────────────────
         if event_id and not _record_event(event_id):
-            logger.info(f"Duplicate event {event_id} — skipping")
+            logger.info("stripe_webhook_duplicate", event_id=event_id)
             return {"status": "ok", "detail": "duplicate event ignored"}
 
         # ── Route to handler ─────────────────────────────────────────────
@@ -106,15 +107,15 @@ async def stripe_webhook(request: Request):
         elif event_type == "invoice.payment_failed":
             await _handle_payment_failed(event)
         else:
-            logger.debug(f"Unhandled Stripe event type: {event_type}")
+            logger.debug("stripe_webhook_unhandled", event_type=event_type)
 
         return {"status": "ok"}
 
     except stripe.error.SignatureVerificationError as e:
-        logger.error(f"Stripe signature verification failed: {e}")
+        logger.error("stripe_signature_invalid", error=str(e))
         raise HTTPException(status_code=400, detail="Invalid signature")
     except Exception as e:
-        logger.error(f"Stripe webhook error: {e}")
+        logger.error("stripe_webhook_error", error=str(e))
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -133,7 +134,7 @@ async def _handle_checkout_completed(event):
     stripe_sub_id = data.get("subscription")
 
     if not plan_code or not user_id:
-        logger.warning("Checkout session missing metadata")
+        logger.warning("checkout_missing_metadata")
         return
 
     import uuid
@@ -141,7 +142,7 @@ async def _handle_checkout_completed(event):
         result = await session.execute(select(Plan).where(Plan.code == plan_code))
         plan = result.scalar_one_or_none()
         if not plan:
-            logger.error(f"Plan not found: {plan_code}")
+            logger.error("plan_not_found", plan_code=plan_code)
             return
 
         result = await session.execute(
@@ -162,7 +163,7 @@ async def _handle_checkout_completed(event):
             session.add(sub)
 
         await session.commit()
-        logger.info(f"Subscription activated for user {user_id} on plan {plan_code}")
+        logger.info("subscription_activated", user_id=user_id, plan_code=plan_code)
 
 
 async def _handle_subscription_updated(event):
@@ -180,7 +181,7 @@ async def _handle_subscription_updated(event):
     stripe_status = data.get("status")  # active, past_due, canceled, etc.
 
     if not stripe_sub_id:
-        logger.warning("subscription.updated event missing subscription id")
+        logger.warning("subscription_updated_missing_id")
         return
 
     # Determine the new price ID from the subscription items
@@ -210,7 +211,7 @@ async def _handle_subscription_updated(event):
         )
         sub = result.scalar_one_or_none()
         if not sub:
-            logger.warning(f"No local subscription found for Stripe sub {stripe_sub_id}")
+            logger.warning("subscription_not_found", stripe_sub_id=stripe_sub_id)
             return
 
         # Update status
@@ -224,11 +225,9 @@ async def _handle_subscription_updated(event):
             plan = plan_result.scalar_one_or_none()
             if plan:
                 sub.plan_id = plan.id
-                logger.info(
-                    f"Subscription {stripe_sub_id} plan changed to {new_plan_code}"
-                )
+                logger.info("subscription_plan_changed", stripe_sub_id=stripe_sub_id, new_plan=new_plan_code)
             else:
-                logger.warning(f"Plan not found for code {new_plan_code}")
+                logger.warning("plan_not_found", plan_code=new_plan_code)
         elif new_price_id:
             # Price ID not in our config — try matching via Plan.stripe_price_id
             plan_result = await session.execute(
@@ -237,10 +236,7 @@ async def _handle_subscription_updated(event):
             plan = plan_result.scalar_one_or_none()
             if plan:
                 sub.plan_id = plan.id
-                logger.info(
-                    f"Subscription {stripe_sub_id} plan changed to {plan.code} "
-                    f"(matched via stripe_price_id)"
-                )
+                logger.info("subscription_plan_changed", stripe_sub_id=stripe_sub_id, new_plan=plan.code, matched_via="stripe_price_id")
 
         # Update period timestamps if present
         period_start = data.get("current_period_start")
@@ -251,9 +247,7 @@ async def _handle_subscription_updated(event):
             sub.current_period_end = datetime.fromtimestamp(period_end, tz=timezone.utc)
 
         await session.commit()
-        logger.info(
-            f"Subscription {stripe_sub_id} updated: status={mapped_status}"
-        )
+        logger.info("subscription_updated", stripe_sub_id=stripe_sub_id, status=mapped_status)
 
 
 async def _handle_subscription_deleted(event):
@@ -266,7 +260,7 @@ async def _handle_subscription_deleted(event):
     stripe_sub_id = data.get("id")
 
     if not stripe_sub_id:
-        logger.warning("subscription.deleted event missing subscription id")
+        logger.warning("subscription_deleted_missing_id")
         return
 
     async with async_session() as session:
@@ -277,7 +271,7 @@ async def _handle_subscription_deleted(event):
         )
         sub = result.scalar_one_or_none()
         if not sub:
-            logger.warning(f"No local subscription found for Stripe sub {stripe_sub_id}")
+            logger.warning("subscription_not_found", stripe_sub_id=stripe_sub_id)
             return
 
         # Look up the free plan
@@ -286,7 +280,7 @@ async def _handle_subscription_deleted(event):
         )
         free_plan = plan_result.scalar_one_or_none()
         if not free_plan:
-            logger.error("Free plan not found in database — cannot downgrade")
+            logger.error("free_plan_not_found")
             return
 
         sub.plan_id = free_plan.id
@@ -294,10 +288,7 @@ async def _handle_subscription_deleted(event):
         sub.stripe_subscription_id = None  # clear the Stripe reference
 
         await session.commit()
-        logger.info(
-            f"Subscription {stripe_sub_id} deleted — user {sub.user_id} "
-            f"downgraded to free plan"
-        )
+        logger.info("subscription_deleted", stripe_sub_id=stripe_sub_id, user_id=str(sub.user_id))
 
 
 async def _handle_payment_failed(event):
@@ -320,10 +311,7 @@ async def _handle_payment_failed(event):
     customer_email = data.get("customer_email")
     attempt_count = data.get("attempt_count", 0)
 
-    logger.warning(
-        f"Payment failed for subscription {stripe_sub_id} "
-        f"(email={customer_email}, attempt={attempt_count})"
-    )
+    logger.warning("payment_failed", stripe_sub_id=stripe_sub_id, customer_email=customer_email, attempt_count=attempt_count)
 
     if not stripe_sub_id:
         return
@@ -336,10 +324,7 @@ async def _handle_payment_failed(event):
         )
         sub = result.scalar_one_or_none()
         if not sub:
-            logger.warning(
-                f"No local subscription for Stripe sub {stripe_sub_id} — "
-                f"cannot evaluate grace-period downgrade"
-            )
+            logger.warning("subscription_not_found", stripe_sub_id=stripe_sub_id, context="payment_failed_downgrade")
             return
 
         # Downgrade to free after 3+ failed attempts (grace period expired)
@@ -352,17 +337,11 @@ async def _handle_payment_failed(event):
                 sub.plan_id = free_plan.id
                 sub.status = "past_due"
                 await session.commit()
-                logger.warning(
-                    f"Grace period expired for subscription {stripe_sub_id} — "
-                    f"user {sub.user_id} downgraded to free plan"
-                )
+                logger.warning("grace_period_expired", stripe_sub_id=stripe_sub_id, user_id=str(sub.user_id))
             else:
-                logger.error("Free plan not found — cannot downgrade after payment failure")
+                logger.error("free_plan_not_found", context="payment_failure_downgrade")
         else:
             # Mark as past_due but keep current plan
             sub.status = "past_due"
             await session.commit()
-            logger.info(
-                f"Subscription {stripe_sub_id} marked past_due "
-                f"(attempt {attempt_count}, grace period still active)"
-            )
+            logger.info("subscription_past_due", stripe_sub_id=stripe_sub_id, attempt_count=attempt_count)

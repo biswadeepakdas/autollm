@@ -9,6 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
+from app.logging_config import get_logger
+
+logger = get_logger(__name__)
 from app.auth.deps import AuthedProject
 from app.models.feature import Feature, FeatureSetting
 from app.models.llm_request import LLMRequest
@@ -92,6 +95,18 @@ async def ingest(request: Request, body: IngestRequest, project: AuthedProject, 
         usage.limit_hit_at = datetime.now(timezone.utc)
 
     await db.flush()
+
+    logger.info(
+        "llm_request_ingested",
+        project_id=str(project.id),
+        feature=body.feature,
+        provider=body.provider,
+        model=body.model,
+        prompt_tokens=body.prompt_tokens,
+        completion_tokens=body.completion_tokens,
+        cost_cents=cost,
+        latency_ms=body.latency_ms,
+    )
 
     return IngestResponse(accepted=True, request_id=llm_req.id)
 

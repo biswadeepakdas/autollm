@@ -4,6 +4,18 @@ import hashlib
 import secrets
 from datetime import datetime, timezone, timedelta
 
+
+def _utcnow():
+    """Return current UTC time, timezone-aware."""
+    return datetime.now(timezone.utc)
+
+
+def _ensure_aware(dt: datetime) -> datetime:
+    """Make a naive datetime UTC-aware (for SQLite compatibility in tests)."""
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -88,7 +100,7 @@ async def reset_password(body: ResetPasswordRequest, db: AsyncSession = Depends(
     if not reset_token:
         raise HTTPException(status_code=400, detail="Invalid or expired reset token")
 
-    if reset_token.expires_at < datetime.now(timezone.utc):
+    if _ensure_aware(reset_token.expires_at) < _utcnow():
         reset_token.used = True
         raise HTTPException(status_code=400, detail="Reset token has expired")
 
@@ -117,7 +129,7 @@ async def verify_reset_token(body: VerifyTokenRequest, db: AsyncSession = Depend
     )
     reset_token = result.scalar_one_or_none()
 
-    if not reset_token or reset_token.expires_at < datetime.now(timezone.utc):
+    if not reset_token or _ensure_aware(reset_token.expires_at) < _utcnow():
         return {"valid": False}
 
     return {"valid": True}

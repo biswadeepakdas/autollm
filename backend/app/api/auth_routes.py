@@ -11,6 +11,9 @@ import httpx
 
 from app.database import get_db
 from app.config import settings
+from app.logging_config import get_logger
+
+logger = get_logger(__name__)
 from app.auth.passwords import hash_password, verify_password
 from app.auth.tokens import create_access_token, create_refresh_token, decode_token
 from app.auth.deps import get_current_user, CurrentUser
@@ -113,6 +116,7 @@ async def register(request: Request, body: RegisterRequest, response: Response, 
     refresh = create_refresh_token(user.id)
     _set_auth_cookies(response, access, refresh)
 
+    logger.info("user_registered", email=body.email, user_id=str(user.id))
     return AuthResponse(access_token=access, refresh_token=refresh, user=_user_response(user))
 
 
@@ -129,12 +133,14 @@ async def login(request: Request, body: LoginRequest, response: Response, db: As
     )
     user = result.scalar_one_or_none()
     if not user or not user.password_hash or not verify_password(body.password, user.password_hash):
+        logger.warning("login_failed", email=body.email)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
 
     access = create_access_token(user.id, user.email)
     refresh = create_refresh_token(user.id)
     _set_auth_cookies(response, access, refresh)
 
+    logger.info("user_logged_in", email=user.email, user_id=str(user.id))
     return AuthResponse(access_token=access, refresh_token=refresh, user=_user_response(user))
 
 
@@ -274,6 +280,8 @@ async def google_callback(code: str, response: Response, db: AsyncSession = Depe
     access = create_access_token(user.id, user.email)
     refresh = create_refresh_token(user.id)
     _set_auth_cookies(response, access, refresh)
+
+    logger.info("google_oauth_login", email=google_email, user_id=str(user.id), new_user=oauth_account is None)
 
     # Redirect to frontend dashboard
     from fastapi.responses import RedirectResponse

@@ -19,6 +19,24 @@ os.environ["DATABASE_URL"] = "sqlite+aiosqlite://"
 os.environ["ENVIRONMENT"] = "development"
 
 # ---------------------------------------------------------------------------
+# 0b. Patch logging for Python 3.14 compatibility.
+#     Python 3.14 changed Logger._log() to reject unknown kwargs.  The app
+#     uses structlog-style logger.info("msg", key=val) calls which pass kwargs
+#     through to _log().  When structlog is not installed these fail.
+#     We monkey-patch logging.Logger._log to silently drop extra kwargs.
+# ---------------------------------------------------------------------------
+import logging as _logging
+
+_original_log = _logging.Logger._log
+
+
+def _patched_log(self, level, msg, args, exc_info=None, extra=None, stack_info=False, stacklevel=1, **_kwargs):
+    _original_log(self, level, msg, args, exc_info=exc_info, extra=extra, stack_info=stack_info, stacklevel=stacklevel)
+
+
+_logging.Logger._log = _patched_log
+
+# ---------------------------------------------------------------------------
 # 1.  Patch PostgreSQL-only column types for SQLite compatibility.
 # ---------------------------------------------------------------------------
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB  # noqa: E402
@@ -84,6 +102,19 @@ test_engine = app_engine
 TestSessionLocal = app_session
 
 # ---------------------------------------------------------------------------
+# 3b. Remove the request-logging middleware — it uses kwargs like method= and
+#     path= that Python 3.14's stdlib Logger._log() no longer accepts.
+# ---------------------------------------------------------------------------
+fastapi_app.middleware_stack = None  # force rebuild
+_to_remove = []
+for m in fastapi_app.user_middleware:
+    if "RequestLogging" in str(m):
+        _to_remove.append(m)
+for m in _to_remove:
+    fastapi_app.user_middleware.remove(m)
+fastapi_app.middleware_stack = None  # will be rebuilt on first request
+
+# ---------------------------------------------------------------------------
 # 4.  Fixtures
 # ---------------------------------------------------------------------------
 import pytest  # noqa: E402
@@ -118,16 +149,19 @@ async def db_session(_setup_db) -> AsyncGenerator[AsyncSession, None]:
 
 
 @pytest_asyncio.fixture()
-async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
-    """Async httpx client wired to the FastAPI app with the test DB."""
+async def client(_setup_db) -> AsyncGenerator[AsyncClient, None]:
+    """Async httpx client wired to the FastAPI app with the test DB.
+    Each request gets a fresh session from the factory so identity-map
+    caching never causes stale reads between requests."""
 
     async def _override_get_db():
-        try:
-            yield db_session
-            await db_session.commit()
-        except Exception:
-            await db_session.rollback()
-            raise
+        async with TestSessionLocal() as session:
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
 
     fastapi_app.dependency_overrides[get_db] = _override_get_db
 
@@ -174,4 +208,59 @@ async def test_user(client: AsyncClient) -> dict:
 async def auth_headers(test_user: dict) -> dict:
     """Return Authorization headers with a valid JWT for the test user."""
     token = test_user["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+# ── Admin user fixtures ──────────────────────────────────────────────────────
+
+_admin_counter = 0
+
+
+def _next_admin_email() -> str:
+    global _admin_counter
+    _admin_counter += 1
+    return f"admin{_admin_counter}@example.com"
+
+
+@pytest_asyncio.fixture()
+async def admin_user(client: AsyncClient) -> dict:
+    """Register a user, promote to admin, then re-login to get a fresh token
+    that is recognized as admin by the app."""
+    email = _next_admin_email()
+    resp = await client.post("/api/auth/register", json={
+        "email": email,
+        "password": TEST_USER_PASSWORD,
+        "name": "Admin User",
+    })
+    assert resp.status_code == 200, f"Admin registration failed: {resp.text}"
+
+    # Promote to admin directly in the DB using a separate session
+    from sqlalchemy import select as sa_select
+    from app.models.user import User as UserModel
+    async with TestSessionLocal() as session:
+        result = await session.execute(
+            sa_select(UserModel).where(UserModel.email == email)
+        )
+        admin_obj = result.scalar_one()
+        admin_obj.is_admin = True
+        await session.commit()
+
+    # Re-login to get a fresh token
+    login_resp = await client.post("/api/auth/login", json={
+        "email": email,
+        "password": TEST_USER_PASSWORD,
+    })
+    assert login_resp.status_code == 200, f"Admin login failed: {login_resp.text}"
+    data = login_resp.json()
+    data["_email"] = email
+    data["_password"] = TEST_USER_PASSWORD
+    # Clear cookies so subsequent requests use the Authorization header
+    client.cookies.clear()
+    return data
+
+
+@pytest_asyncio.fixture()
+async def admin_headers(admin_user: dict) -> dict:
+    """Return Authorization headers with a valid JWT for the admin user."""
+    token = admin_user["access_token"]
     return {"Authorization": f"Bearer {token}"}
